@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+env/
+venv/
+ENV/
+
+# Data and model files
+*.npy
+*.npz
+*.h5
+*.pkl
+*.pt
+*.ckpt
+
+# Logs
+*.log
+logs/
+
+# Jupyter Notebooks (if used)
+*.ipynb
+
+# Visualization outputs
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
+
+# macOS system files
+.DS_Store
+
+# VSCode or JetBrains project files (optional)
+.vscode/
+.idea/
