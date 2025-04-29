@@ -38,18 +38,34 @@ def train_discriminator(discriminator, real_graphs_tensor, qnode, param_tensor, 
         print("[Discriminator] No valid fake samples; skipping step.")
         return None
 
-    batch_fake = torch.stack(batch_fake).to(device)  # ✅ All you need
+    batch_fake = torch.stack(batch_fake).to(device)
     batch_fake_labels = torch.zeros((len(batch_fake), 1), device=device)
 
+    # === Fake output through discriminator ===
     fake_out = discriminator(batch_fake)
+
+    # === NaN detection on fake_out ===
+    if torch.isnan(fake_out).any():
+        print(f"⚠️ Discriminator output contains NaNs!")
+        print(f"Sample fake_out: {fake_out}")
+        return None  # Abort this training step
+
+    # === Optional: Print stats of discriminator outputs ===
+    print(f"[Discriminator] Fake_out stats - Mean: {fake_out.mean().item():.4f}, Std: {fake_out.std().item():.4f}, Min: {fake_out.min().item():.4f}, Max: {fake_out.max().item():.4f}")
+
     disc_loss_fake = criterion(fake_out, batch_fake_labels)
     disc_loss_fake.backward()
 
+    # === Gradient Clipping ===
+    torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
+
     optimizer_disc.step()
+
     total_loss = disc_loss_real.item() + disc_loss_fake.item()
 
-    print(f"[Discriminator] Loss: {total_loss:.4f}")
+    print(f"[Discriminator] Total Loss: {total_loss:.4f}")
     return total_loss
+
 
 def train_qugan(discriminator, qnode, param_tensor, epochs, device='cpu'):
     criterion = nn.BCELoss()
@@ -60,7 +76,11 @@ def train_qugan(discriminator, qnode, param_tensor, epochs, device='cpu'):
         generator_batch = []
 
         for _ in range(HYPERPARAMS["batch_size"]):
-            adj_matrix, valid, _ = generate_graph_from_qugan(qnode, param_tensor)
+            with torch.no_grad():
+                noise = torch.normal(mean=0, std=HYPERPARAMS["noise_std"], size=param_tensor.shape, device=param_tensor.device)
+                noisy_params = param_tensor + noise
+                adj_matrix, valid, _ = generate_graph_from_qugan(qnode, noisy_params)
+
             if valid:
                 triu_indices = torch.triu_indices(4, 4, offset=1)
                 edge_tensor = adj_matrix[triu_indices[0], triu_indices[1]]
@@ -88,7 +108,7 @@ def train_qugan(discriminator, qnode, param_tensor, epochs, device='cpu'):
 
         # NaN detection
         if torch.isnan(loss):
-            print(f"⚠️ NaN detected in generator loss at epoch {epoch + 1}")
+            print(f"NaN detected in generator loss at epoch {epoch + 1}")
             for name, param in discriminator.named_parameters():
                 if torch.isnan(param).any():
                     print(f"NaN found in discriminator param: {name}")
@@ -188,8 +208,13 @@ def train_model():
 
             print("Edge Weights STD this epoch:", np.std(edge_weights))
 
-            print(f"[Epoch {epoch + 1}] Gen Loss: {g_losses[-1]:.4f}, "
-                  f"Valid Graphs: {mean_valid:.2f}, STD: {std_qugan:.4f}")
+            if g_losses:
+                print(f"[Epoch {epoch + 1}] Gen Loss: {g_losses[-1]:.4f}, "
+                    f"Valid Graphs: {mean_valid:.2f}, STD: {std_qugan:.4f}")
+            else:
+                print(f"[Epoch {epoch + 1}] Gen Loss: fallback used (no valid batch), "
+                    f"Valid Graphs: {mean_valid:.2f}, STD: {std_qugan:.4f}")
+
 
             if model_key not in MODEL_DATA:
                 MODEL_DATA[model_key] = {
