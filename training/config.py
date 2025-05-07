@@ -10,7 +10,7 @@ HYPERPARAMS = {
     "learning_rate_gen": 0.001,
     "num_seeds": 5,
     "batch_size": 32,
-    "epochs": 5,
+    "epochs": 10,
     "gate_type": "PauliY",
     "noise_std": 0.4,              # For parameter noise
     "output_noise_std": 0.01       # For output/noise after circuit
