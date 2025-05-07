@@ -49,23 +49,21 @@ def plot_valid_graphs():
     plt.show()
 
 def plot_std_dev():
-    plt.figure()
-    for model_size, color in MODEL_COLORS.items():
-        arr = np.array(MODEL_DATA.get(model_size, {}).get("std_dev", []), dtype=np.float32)
-        if arr.size == 0:
+    for model_key in MODEL_DATA:
+        std_devs = MODEL_DATA[model_key].get("std_dev", [])
+        
+        if not std_devs or isinstance(std_devs, float):
+            print(f"No valid std_dev list found for model: {model_key}")
             continue
-
-        x = np.arange(1, len(arr) + 1)
-        plt.plot(x, arr, label=f"QuGAN({model_size})", color=color)
-
-        std = np.nanstd(arr)
-        plt.fill_between(x, arr - std, arr + std, color=color, alpha=0.2)
-
-    plt.axhline(y=0.0826, color='red', linestyle='--', label='Training Data STD')
-    plt.xlabel('Epoch')
-    plt.ylabel('Standard Deviation')
+        
+        x = np.arange(1, len(std_devs) + 1)
+        plt.plot(x, std_devs, label=f"{model_key} STD")
+    
+    plt.xlabel("Epoch")
+    plt.ylabel("Standard Deviation")
+    plt.title("Standard Deviation per Epoch")
     plt.legend()
-    plt.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
+    plt.grid(True)
     plt.tight_layout()
     plt.show()
 

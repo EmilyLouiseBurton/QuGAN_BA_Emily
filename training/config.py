@@ -12,8 +12,8 @@ HYPERPARAMS = {
     "batch_size": 32,
     "epochs": 5,
     "gate_type": "PauliY",
-    "noise_std": 0.2,              # For parameter noise
-    "output_noise_std": 0.00       # For output/noise after circuit
+    "noise_std": 0.4,              # For parameter noise
+    "output_noise_std": 0.01       # For output/noise after circuit
 }
 
 
@@ -30,8 +30,8 @@ EVAL_SETTINGS = {
 
 # Init metrics dictionary
 MODEL_DATA = {
-    36: {"valid_graphs": [], "std_dev": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
-    66: {"valid_graphs": [], "std_dev": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
-    72: {"valid_graphs": [], "std_dev": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
-    132: {"valid_graphs": [], "std_dev": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
+    36: {"valid_graphs": [], "std_dev": [], "std_dev_per_step": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
+    66: {"valid_graphs": [], "std_dev": [], "std_dev_per_step": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
+    72: {"valid_graphs": [], "std_dev": [], "std_dev_per_step": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
+    132: {"valid_graphs": [], "std_dev": [], "std_dev_per_step": [], "edge_weights": [], "gen_loss": [], "steps": [], "losses": []},
 }

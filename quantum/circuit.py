@@ -1,9 +1,13 @@
 import pennylane as qml
 import torch
 
+
+
+
 def create_qugan_circuit(num_qubits=6, layers=1, gate_type="RXRY"):
     dev = qml.device("default.qubit", wires=num_qubits)
-    @qml.qnode(dev, interface="torch")
+
+    @qml.qnode(dev, interface="torch", diff_method="parameter-shift")
     def circuit(params):
         idx = 0
         for _ in range(layers):
@@ -26,9 +30,8 @@ def create_qugan_circuit(num_qubits=6, layers=1, gate_type="RXRY"):
             for i in range(num_qubits):
                 qml.CNOT(wires=[i, (i + 1) % num_qubits])
 
-        # returns a torch.Tensor 
         return [qml.expval(qml.PauliZ(wires=i)) for i in range(num_qubits)]
-    
+
     if gate_type == "RX_Y":
         param_count = layers * num_qubits
     elif gate_type == "RXRY":
