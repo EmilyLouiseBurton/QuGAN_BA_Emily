@@ -6,14 +6,14 @@ MODEL_CONFIGS = [
     {"model_type": "QuGAN(132)", "num_qubits": 6, "layers": 10, "gate_type": "RXRY"} 
 ]
 HYPERPARAMS = {
-    "learning_rate_disc": 0.3,
-    "learning_rate_gen": 0.001,
+    "learning_rate_disc": 1e-3,
+    "learning_rate_gen": 5e-4,
     "num_seeds": 5,
     "batch_size": 32,
-    "epochs": 10,
+    "epochs": 3,
     "gate_type": "PauliY",
-    "noise_std": 0.4,              # For parameter noise
-    "output_noise_std": 0.01       # For output/noise after circuit
+    "noise_std": 2.5,
+    "output_noise_std": 2.5,
 }
 
 

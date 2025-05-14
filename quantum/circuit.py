@@ -1,9 +1,6 @@
 import pennylane as qml
 import torch
 
-
-
-
 def create_qugan_circuit(num_qubits=6, layers=1, gate_type="RXRY"):
     dev = qml.device("default.qubit", wires=num_qubits)
 
