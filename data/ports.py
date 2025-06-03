@@ -114,14 +114,23 @@ def describe_graph_set(graphs_tensor):
     print(f"Min edge weight: {all_edges.min():.4f}")
     print(f"Max edge weight: {all_edges.max():.4f}")
 
-# === Run generation ===
-print("\nGenerating realistic sea-route graphs...")
-real_graphs = generate_realistic_graphs(num_graphs=1000, num_ports=4, min_distance=100)
-real_graphs = preprocess_graphs(real_graphs)
+# === Load ====
 
-# Convert to upper triangle vectors
-real_graphs_tensor = np.array([graph[np.triu_indices(4, 1)] for graph in real_graphs])
-real_graphs_tensor = torch.tensor(real_graphs_tensor, dtype=torch.float32)
+if os.path.exists("real_graphs.npy"):
+    real_graphs_tensor = torch.tensor(np.load("real_graphs.npy"), dtype=torch.float32)
+    print(f"Loaded {real_graphs_tensor.shape[0]} real graphs from saved file.")
+else:
+    print("\nGenerating realistic sea-route graphs...")
+    real_graphs = generate_realistic_graphs(num_graphs=1000, num_ports=4, min_distance=100)
+    real_graphs = preprocess_graphs(real_graphs)
+
+    # Convert to upper triangle vectors
+    real_graphs_tensor = np.array([graph[np.triu_indices(4, 1)] for graph in real_graphs])
+    real_graphs_tensor = torch.tensor(real_graphs_tensor, dtype=torch.float32)
+
+    np.save("real_graphs.npy", real_graphs_tensor.numpy())
+    print("Saved real graphs to 'real_graphs.npy'.")
+
 
 # === Summary ===
 print("\nSummary:")
