@@ -5,6 +5,8 @@ from .config import HYPERPARAMS
 from collections import Counter
 import torch.autograd as autograd
 from quantum.utils import check_triangle_inequality
+from scipy.stats import beta, entropy
+from itertools import combinations
 
 def evaluate_generator(qnode, param_tensor, latent_dim, num_graphs=1000, param_noise_std=0.1):
     device = param_tensor.device
@@ -13,10 +15,13 @@ def evaluate_generator(qnode, param_tensor, latent_dim, num_graphs=1000, param_n
     diagnostics = []
 
     for _ in range(num_graphs):
-        noise = torch.normal(mean=0, std=param_noise_std, size=param_tensor.shape, device=device)
-        noisy_params = param_tensor + noise
+        # Inject noise into the generator parameters
+        noise = torch.normal(mean=0.0, std=param_noise_std, size=param_tensor.shape, device=device)
+        noisy_params = (param_tensor + noise).detach()
 
+        # Generate graph from noisy parameters
         adj_matrix, valid_struct, edge_weights = generate_graph_from_qugan(qnode, noisy_params, latent_dim=latent_dim)
+
         is_triangle_valid = check_triangle_inequality(adj_matrix.detach().cpu().numpy())
         is_valid = valid_struct and is_triangle_valid
 
@@ -41,7 +46,6 @@ def evaluate_generator(qnode, param_tensor, latent_dim, num_graphs=1000, param_n
 
     print(f"[Diagnostics] Valid: {summary['valid']}, Struct: {summary['struct']}, Triangle: {summary['triangle']}")
     return valid_count, mean_valid, std_qugan, all_weights, diagnostics
-
 
 def calculate_standard_deviation_and_edges_from_qugan(qnode, param_tensor, latent_dim, num_samples=20):
     edge_weights = []
@@ -127,3 +131,35 @@ def compute_gradient_penalty(D, real_samples, fake_samples, device='cpu', lambda
     gradient_penalty = ((gradient_norm - 1) ** 2).mean() * lambda_gp
     
     return gradient_penalty
+
+
+import pennylane as qml
+import numpy as np
+import torch
+from scipy.stats import entropy
+
+def compute_kl_fidelity_distribution(qnode, param_count, num_qubits, num_samples=5000):
+    """Compute KL divergence between fidelity distribution of a quantum circuit and Haar distribution."""
+    
+    def haar_fidelity_distribution(num_samples=5000):
+        return np.random.beta(a=num_qubits, b=1, size=num_samples)
+
+    fidelities = []
+    for _ in range(num_samples):
+        params = torch.randn(param_count)
+        latent1 = torch.randn(num_qubits)
+        latent2 = torch.randn(num_qubits)
+        with torch.no_grad():
+            state1 = qnode(params, latent1).numpy()
+            state2 = qnode(params, latent2).numpy()
+            fid = np.sum(np.sqrt(state1 * state2)) ** 2
+            fidelities.append(fid)
+
+    hist_fid, bins = np.histogram(fidelities, bins=100, range=(0, 1), density=True)
+    hist_haar, _ = np.histogram(haar_fidelity_distribution(num_samples), bins=bins, density=True)
+
+    hist_fid += 1e-10
+    hist_haar += 1e-10
+
+    kl_div = entropy(hist_fid, hist_haar)
+    return kl_div

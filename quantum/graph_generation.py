@@ -3,9 +3,9 @@ import numpy as np
 from training.config import HYPERPARAMS
 from quantum.utils import check_triangle_inequality
 
-def generate_graph_from_qugan(qnode, params, latent_dim=6):
-    # Sample latent vector
-    latent_input = torch.empty(latent_dim, device=params.device).uniform_(0, 2 * np.pi)
+def generate_graph_from_qugan(qnode, params, latent_dim=6, fixed_latent=None):
+    # Fixed latent input 
+    latent_input = fixed_latent if fixed_latent is not None else torch.randn(latent_dim, device=params.device)
 
     # Run quantum circuit
     raw_outputs = qnode(params, latent_input)
@@ -16,24 +16,26 @@ def generate_graph_from_qugan(qnode, params, latent_dim=6):
             for r in raw_outputs
         ])
     elif not isinstance(raw_outputs, torch.Tensor):
-        raw_outputs = torch.tensor(raw_outputs, dtype=torch.float32, device=params.device)
+        raw_outputs = qnode(params, latent_input)
 
-    # Take first 6 outputs and map to [0, 1] using sigmoid
-    edge_weights = (1 + raw_outputs[:6]) / 2
+    raw_edge_weights = raw_outputs[:6]
 
-    # === normalize to target mean ===
-    target_mean = HYPERPARAMS.get("target_edge_mean", 0.25)
-    edge_mean = edge_weights.mean().clamp(min=1e-4)
-    edge_weights = edge_weights / edge_mean * target_mean
-
-    # === Build symmetric 4x4 adjacency matrix ===
+    # === Build symmetric 4x4 adjacency matrix with raw weights ===
     num_nodes = 4
-    adj_matrix = torch.zeros((num_nodes, num_nodes), dtype=edge_weights.dtype, device=edge_weights.device)
+    adj_matrix = torch.zeros((num_nodes, num_nodes), dtype=raw_edge_weights.dtype, device=raw_edge_weights.device)
     triu_indices = torch.triu_indices(num_nodes, num_nodes, offset=1)
-    adj_matrix[triu_indices[0], triu_indices[1]] = edge_weights
+    adj_matrix[triu_indices[0], triu_indices[1]] = raw_edge_weights
     adj_matrix = adj_matrix + adj_matrix.T
 
-    # === Check triangle inequality ===
-    valid = check_triangle_inequality(adj_matrix.detach().cpu().numpy())
+    # Triangle inequality check 
+    is_valid = check_triangle_inequality(adj_matrix.detach().cpu().numpy())
 
-    return adj_matrix, valid, edge_weights
+    # Normalize so edge weights sum to 1 
+    total = adj_matrix.sum()
+    if total > 0:
+        adj_matrix /= total
+        edge_weights = adj_matrix[triu_indices[0], triu_indices[1]]
+    else:
+        edge_weights = raw_edge_weights  # fallback
+
+    return adj_matrix, is_valid, edge_weights
