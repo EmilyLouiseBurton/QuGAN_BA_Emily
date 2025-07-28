@@ -10,8 +10,10 @@ def create_qugan_generator(num_qubits=6, layers=5, gate_type="RX_Y"):
 
     @qml.qnode(dev, interface="torch", diff_method="parameter-shift")
     def circuit(params, latent_input):
-        # Step 1: Angle embedding of latent input
+        # Step 1: Angle embedding of latent input using XYZ (QAIO consistent)
         qml.AngleEmbedding(latent_input, wires=range(num_qubits), rotation='X')
+        qml.AngleEmbedding(latent_input, wires=range(num_qubits), rotation='Y')
+        qml.AngleEmbedding(latent_input, wires=range(num_qubits), rotation='Z')
 
         # Step 2: Quantum circuit based on ansatz
         idx = 0

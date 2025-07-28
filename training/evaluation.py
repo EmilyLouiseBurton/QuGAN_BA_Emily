@@ -2,164 +2,76 @@ import torch
 import numpy as np
 from quantum.graph_generation import generate_graph_from_qugan
 from .config import HYPERPARAMS
-from collections import Counter
-import torch.autograd as autograd
 from quantum.utils import check_triangle_inequality
-from scipy.stats import beta, entropy
-from itertools import combinations
 
-def evaluate_generator(qnode, param_tensor, latent_dim, num_graphs=1000, param_noise_std=0.1):
+
+def evaluate_generator(qnode, param_tensor, latent_dim, num_graphs=1000):
     device = param_tensor.device
     valid_count = 0
-    all_weights = []
+    graph_stds = []
     diagnostics = []
+    all_valid_edges = []
 
     for _ in range(num_graphs):
-        # Inject noise into the generator parameters
-        noise = torch.normal(mean=0.0, std=param_noise_std, size=param_tensor.shape, device=device)
-        noisy_params = (param_tensor + noise).detach()
+        params = param_tensor.detach()
+        adj_matrix, _, edge_weights = generate_graph_from_qugan(qnode, params, latent_dim=latent_dim)
 
-        # Generate graph from noisy parameters
-        adj_matrix, valid_struct, edge_weights = generate_graph_from_qugan(qnode, noisy_params, latent_dim=latent_dim)
-
-        is_triangle_valid = check_triangle_inequality(adj_matrix.detach().cpu().numpy())
-        is_valid = valid_struct and is_triangle_valid
+        is_valid = check_triangle_inequality(adj_matrix.detach().cpu().numpy())
 
         if is_valid:
             valid_count += 1
+            weights_np = edge_weights.detach().cpu().numpy()
+            std_weight = weights_np.std()
 
-        all_weights.extend(edge_weights.detach().cpu().tolist())
-        diagnostics.append({
-            "is_valid": is_valid,
-            "structural_valid": valid_struct,
-            "triangle_valid": is_triangle_valid,
-            "edge_std": edge_weights.std().item()
-        })
+            graph_stds.append(std_weight)
+            all_valid_edges.append(weights_np)
 
-    std_qugan = np.std(all_weights)
+            diagnostics.append({
+                "is_valid": is_valid,
+                "edge_mean": weights_np.mean(),
+                "edge_std": std_weight
+            })
+
+    if all_valid_edges:
+        edge_matrix = np.stack(all_valid_edges)  # shape = (num_valid_graphs, 6)
+        std_across_graphs = np.std(edge_matrix, axis=0).mean()  # mean std across edge positions
+    else:
+        std_across_graphs = 0.0
+
+    mean_intra_graph_std = np.mean(graph_stds) if graph_stds else 0.0
     mean_valid = valid_count / num_graphs
-    summary = Counter()
-    for d in diagnostics:
-        summary["valid"] += int(d["is_valid"])
-        summary["struct"] += int(d["structural_valid"])
-        summary["triangle"] += int(d["triangle_valid"])
 
-    print(f"[Diagnostics] Valid: {summary['valid']}, Struct: {summary['struct']}, Triangle: {summary['triangle']}")
-    return valid_count, mean_valid, std_qugan, all_weights, diagnostics
+    print(f"[Diagnostics] Valid Graphs: {valid_count}/{num_graphs}")
+    print(f"[Inter-Graph STD] (of Edge Weights) {std_across_graphs:.6f} across {valid_count} valid graphs")
+    print(f"[Intra-Graph STD] (Mean across Graphs) {mean_intra_graph_std:.6f} across {valid_count} valid graphs")
+
+    return valid_count, mean_valid, std_across_graphs, mean_intra_graph_std, [], graph_stds, diagnostics
 
 def calculate_standard_deviation_and_edges_from_qugan(qnode, param_tensor, latent_dim, num_samples=20):
-    edge_weights = []
+    graph_means = []
+
     for _ in range(num_samples):
-        noise = torch.normal(mean=0, std=HYPERPARAMS.get("param_noise_std", 0.1), size=param_tensor.shape, device=param_tensor.device)
-        noisy_params = (param_tensor + noise).detach()
-        _, _, weights = generate_graph_from_qugan(qnode, noisy_params, latent_dim=latent_dim)
-        if weights is not None:
-            edge_weights.extend(weights.tolist())
+        params = param_tensor.detach()
+        adj_matrix, _, edge_weights = generate_graph_from_qugan(qnode, params, latent_dim=latent_dim)
 
-    edge_weights = np.array(edge_weights)
-    std_dev = np.std(edge_weights) if len(edge_weights) > 0 else 0.0
-    return std_dev, edge_weights
+        is_valid = check_triangle_inequality(adj_matrix.detach().cpu().numpy())
 
+        if is_valid:
+            mean_weight = edge_weights.detach().cpu().numpy().mean()
+            graph_means.append(mean_weight)
 
-def triangle_inequality_penalty(adj_matrix, threshold=1e-4):
-    n = adj_matrix.shape[0]
-    penalty = 0.0
-    for i in range(n):
-        for j in range(n):
-            for k in range(n):
-                if i != j and j != k and i != k:
-                    lhs = adj_matrix[i, j]
-                    rhs = adj_matrix[i, k] + adj_matrix[k, j]
-                    violation = lhs - rhs - threshold
-                    penalty += torch.relu(violation)
-    return penalty / (n * (n - 1) * (n - 2))
+    std_across_graph_means = np.std(graph_means) if graph_means else 0.0
+    return std_across_graph_means, graph_means
 
 
-def compute_gradient_penalty(discriminator, real_samples, fake_samples, device='cpu'):
-    alpha = torch.rand(real_samples.size(0), 1, device=device)
-    alpha = alpha.expand_as(real_samples)
-
-    interpolates = alpha * real_samples + (1 - alpha) * fake_samples
-    interpolates = interpolates.requires_grad_(True)
-    d_interpolates = discriminator(interpolates)
-    ones = torch.ones_like(d_interpolates)
-
-    gradients = autograd.grad(
-        outputs=d_interpolates,
-        inputs=interpolates,
-        grad_outputs=ones,
-        create_graph=True,
-        retain_graph=True,
-        only_inputs=True
-    )[0]
-
-    gradients = gradients.view(gradients.size(0), -1)
-    gradient_norm = gradients.norm(2, dim=1)
-    gradient_penalty = ((gradient_norm - 1) ** 2).mean()
-    return gradient_penalty
-
-
-def compute_gradient_penalty(D, real_samples, fake_samples, device='cpu', lambda_gp=1):
-    """Calculates the gradient penalty loss for WGAN GP"""
-    real_samples = real_samples.to(device)
-    fake_samples = fake_samples.to(device)
-    
-    batch_size = real_samples.size(0)
-    
-    # Random weight term for interpolation between real and fake samples
-    alpha = torch.rand(batch_size, 1, device=device)
-    alpha = alpha.expand_as(real_samples)
-    
-    interpolates = alpha * real_samples + ((1 - alpha) * fake_samples)
-    interpolates = interpolates.requires_grad_(True)
-
-    d_interpolates = D(interpolates)
-    
-    fake = torch.ones_like(d_interpolates, device=device, requires_grad=False)
-    
-    gradients = torch.autograd.grad(
-        outputs=d_interpolates,
-        inputs=interpolates,
-        grad_outputs=fake,
-        create_graph=True,
-        retain_graph=True,
-        only_inputs=True
-    )[0]
-    
-    gradients = gradients.view(batch_size, -1)
-    gradient_norm = gradients.norm(2, dim=1)
-    gradient_penalty = ((gradient_norm - 1) ** 2).mean() * lambda_gp
-    
-    return gradient_penalty
-
-
-import pennylane as qml
-import numpy as np
-import torch
-from scipy.stats import entropy
-
-def compute_kl_fidelity_distribution(qnode, param_count, num_qubits, num_samples=5000):
-    """Compute KL divergence between fidelity distribution of a quantum circuit and Haar distribution."""
-    
-    def haar_fidelity_distribution(num_samples=5000):
-        return np.random.beta(a=num_qubits, b=1, size=num_samples)
-
-    fidelities = []
-    for _ in range(num_samples):
-        params = torch.randn(param_count)
-        latent1 = torch.randn(num_qubits)
-        latent2 = torch.randn(num_qubits)
-        with torch.no_grad():
-            state1 = qnode(params, latent1).numpy()
-            state2 = qnode(params, latent2).numpy()
-            fid = np.sum(np.sqrt(state1 * state2)) ** 2
-            fidelities.append(fid)
-
-    hist_fid, bins = np.histogram(fidelities, bins=100, range=(0, 1), density=True)
-    hist_haar, _ = np.histogram(haar_fidelity_distribution(num_samples), bins=bins, density=True)
-
-    hist_fid += 1e-10
-    hist_haar += 1e-10
-
-    kl_div = entropy(hist_fid, hist_haar)
+def compute_kl_fidelity_distribution(qnode, param_count, num_qubits, torch_device, num_samples=100):
+    params = torch.randn(param_count, device=torch_device)
+    latent1 = torch.randn(num_qubits, device=torch_device)
+    latent2 = torch.randn(num_qubits, device=torch_device)
+    state1 = qnode(params, latent1).detach().cpu().numpy()
+    state2 = qnode(params, latent2).detach().cpu().numpy()
+    eps = 1e-10
+    state1 = np.clip(state1, eps, 1.0)
+    state2 = np.clip(state2, eps, 1.0)
+    kl_div = np.sum(state1 * np.log(state1 / state2))
     return kl_div

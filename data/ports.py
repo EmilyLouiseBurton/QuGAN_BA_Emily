@@ -6,8 +6,10 @@ import os
 from itertools import combinations
 from collections import Counter
 import searoute as sr
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# === Load port coordinates from World Port Index CSV ===
+# Load port coordinates from World Port Index CSV 
 base_dir = os.path.dirname(__file__)
 csv_file = os.path.join(base_dir, "UpdatedPub150.csv")
 
@@ -30,7 +32,7 @@ port_pair_counter = Counter()
 print("Loaded ports from WPI CSV:", len(all_ports))
 print("Sample ports:", all_ports[:5])
 
-# === Floyd-Warshall for triangle inequality ===
+# Floyd-Warshall for triangle inequality 
 def floyd_warshall(graph, num_ports):
     for k in range(num_ports):
         for i in range(num_ports):
@@ -39,12 +41,12 @@ def floyd_warshall(graph, num_ports):
                     graph[i, j] = graph[i, k] + graph[k, j]
     return graph
 
-# === Generate graphs ===
+#  Generate graphs 
 def generate_realistic_graphs(num_graphs=1000, num_ports=4, min_distance=100):
     graphs = []
     attempts = 0
     max_attempts = num_graphs * 20
-    valid_graphs_count = 0  # Track number of valid graphs
+    valid_graphs_count = 0
 
     while len(graphs) < num_graphs and attempts < max_attempts:
         attempts += 1
@@ -75,7 +77,6 @@ def generate_realistic_graphs(num_graphs=1000, num_ports=4, min_distance=100):
 
         distances = floyd_warshall(distances, num_ports)
 
-        # Check for invalid values in the distance matrix (negative or NaN)
         if np.any(distances < 0) or np.any(np.isnan(distances)):
             print(f"Skipping graph {attempts}: Invalid distances after Floyd-Warshall")
             continue
@@ -89,7 +90,7 @@ def generate_realistic_graphs(num_graphs=1000, num_ports=4, min_distance=100):
     print(f"Total valid graphs generated: {valid_graphs_count}")
     return graphs
 
-# === Normalize edge weights (sum = 1) ===
+#  Normalize edge weights (sum = 1) 
 def preprocess_graphs(graphs):
     processed_graphs = []
     skipped_graphs = 0
@@ -104,7 +105,7 @@ def preprocess_graphs(graphs):
     print(f"Skipped {skipped_graphs} graphs due to zero upper sum")
     return processed_graphs
 
-# === Describe dataset ===
+# Describe dataset 
 def describe_graph_set(graphs_tensor):
     print("\n--- Graph Set Statistics ---")
     all_edges = graphs_tensor.flatten()
@@ -114,8 +115,7 @@ def describe_graph_set(graphs_tensor):
     print(f"Min edge weight: {all_edges.min():.4f}")
     print(f"Max edge weight: {all_edges.max():.4f}")
 
-# === Load ====
-
+# Load 
 if os.path.exists("real_graphs.npy"):
     real_graphs_tensor = torch.tensor(np.load("real_graphs.npy"), dtype=torch.float32)
     print(f"Loaded {real_graphs_tensor.shape[0]} real graphs from saved file.")
@@ -123,27 +123,33 @@ else:
     print("\nGenerating realistic sea-route graphs...")
     real_graphs = generate_realistic_graphs(num_graphs=1000, num_ports=4, min_distance=100)
     real_graphs = preprocess_graphs(real_graphs)
-
-    # Convert to upper triangle vectors
     real_graphs_tensor = np.array([graph[np.triu_indices(4, 1)] for graph in real_graphs])
     real_graphs_tensor = torch.tensor(real_graphs_tensor, dtype=torch.float32)
-
     np.save("real_graphs.npy", real_graphs_tensor.numpy())
     print("Saved real graphs to 'real_graphs.npy'.")
 
-
-# === Summary ===
 print("\nSummary:")
 print(f"Total valid graphs: {len(real_graphs_tensor)}")
 if len(real_graphs_tensor) > 0:
     print("Sample edge weights from first graph:", real_graphs_tensor[0])
     describe_graph_set(real_graphs_tensor)
 
-# === Check final tensor shape ===
 if real_graphs_tensor.shape[0] == 0:
     print("Error: No valid graphs to train on.")
 else:
     print(f"Final tensor shape: {real_graphs_tensor.shape}")
 
-# === Save real dataset ===
-np.save("real_graphs.npy", real_graphs_tensor.numpy())
+np.save("checkpoints/real_edge_weights.npy", real_graphs_tensor.numpy())
+
+# Plot Real Data Edge-Weight Distribution 
+all_real_weights = real_graphs_tensor.numpy().flatten()
+plt.figure(figsize=(8, 5))
+sns.kdeplot(all_real_weights, color="black", lw=2, label="Real Data")
+plt.xlabel("Edge Weight", fontweight='bold')
+plt.ylabel("Density", fontweight='bold')
+plt.title("Real Data Edge-Weight Distribution")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("real_data_edge_weight_distribution.png", dpi=300)
+plt.close()

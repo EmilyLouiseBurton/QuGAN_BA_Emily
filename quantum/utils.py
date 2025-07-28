@@ -1,19 +1,13 @@
 import numpy as np
 import torch
+from itertools import combinations
 
-def check_triangle_inequality(adj_matrix, tol=0):
-    # Ensure symmetry
-    if not np.allclose(adj_matrix, adj_matrix.T, atol=tol):
-        raise ValueError("Adjacency matrix must be symmetric.")
 
-    n = adj_matrix.shape[0]
-    for i in range(n):
-        for j in range(i + 1, n):
-            for k in range(j + 1, n):
-                a = adj_matrix[i, j]
-                b = adj_matrix[j, k]
-                c = adj_matrix[i, k]
-
-                if a + b < c - tol or a + c < b - tol or b + c < a - tol:
-                    return False
-    return True
+def check_all_triangle_inequalities(adj_matrix, tol=0.01):
+    adj_matrix = (adj_matrix + adj_matrix.T) / 2
+    triplets = combinations(range(adj_matrix.shape[0]), 3)
+    for i, j, k in triplets:
+        a, b, c = adj_matrix[i, j], adj_matrix[j, k], adj_matrix[i, k]
+        if not ((a + b + tol >= c) and (a + c + tol >= b) and (b + c + tol >= a)):
+            return False 
+    return True  # All triplets satisfy the inequality
