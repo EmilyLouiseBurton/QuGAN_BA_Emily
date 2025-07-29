@@ -3,8 +3,8 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 
-# Cleaned version of the plotting function
-def run_clean_plots(model_data, max_graphs=1000):
+
+def run_plots(model_data, max_graphs=1000):
     sns.set(style="whitegrid", font_scale=1.2)
 
     MODEL_COLORS = {

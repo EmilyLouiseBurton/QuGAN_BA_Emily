@@ -1,0 +1,8 @@
+torch
+pennylane
+numpy
+matplotlib
+seaborn
+searoute
+scipy
+pandas

@@ -13,8 +13,8 @@ HYPERPARAMS = {
     "num_seeds": 1,
     "batch_size": 32,
     "epochs": 1000,
-    "share_latent_vector": True,
-    "use_minibatch_discriminator": True,
+    "share_latent_vector": False,
+    "use_minibatch_discriminator": False,
     "minibatch_weight": 0.1
 }
 
