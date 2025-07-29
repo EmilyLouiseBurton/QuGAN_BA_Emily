@@ -14,6 +14,9 @@ Getting Started
 3. Run training and evaluation:
    python main.py
 
+
+Model hyperparameters can be adjusted in training/config.py under the HYPERPARAMS dictionary (e.g., learning rate, batch size, number of epochs, and training options like shared latent vectors and minibatch discrimination).
+
 Output
 
 After training and evaluation, results are saved in the checkpoints/ folder:
